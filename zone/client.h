@@ -898,9 +898,9 @@ public:
 	void SendMoneyUpdate();
 	bool TakeMoneyFromPP(uint64 copper, bool update_client = false);
 	bool TakePlatinum(uint32 platinum, bool update_client = false);
-	void AddMoneyToPP(uint64 copper, bool update_client = false);
-	void AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client = false);
-	void AddPlatinum(uint32 platinu, bool update_client = false);
+	void AddMoneyToPP(uint64 copper, bool update_client = false, bool update_db = true);
+	void AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client = false, bool update_db = true);
+	void AddPlatinum(uint32 platinum, bool update_client = false, bool update_db = true);
 	bool HasMoney(uint64 copper);
 	uint64 GetCarriedMoney();
 	uint32 GetCarriedPlatinum();
@@ -1232,6 +1232,12 @@ public:
 	float CalcClassicPriceMod(Mob* other = 0, bool reverse = false);
 	float CalcNewPriceMod(Mob* other = 0, bool reverse = false);
 	float CalcPriceMod(Mob* other = 0, bool reverse = false);
+	uint32 GetMerchantSellPrice(Mob* merchant, const EQ::ItemData* item);
+	uint32 GetMerchantSellPrice(Mob* merchant, const EQ::ItemInstance* inst);
+	uint32 GetMerchantBuyPrice(Mob* merchant, const EQ::ItemData* item);
+	uint32 GetMerchantBuyPrice(Mob* merchant, const EQ::ItemInstance* inst);
+	uint32 ResolvePlayerSellQuantity(EQ::ItemInstance* inst, uint32 quantity, uint32 unit_price);
+	void UpdateMerchantStock(Mob* merchant, EQ::ItemInstance* inst, uint32 quantity);
 	void ResetTrade();
 	void DropInst(const EQ::ItemInstance* inst);
 	bool TrainDiscipline(uint32 itemid);

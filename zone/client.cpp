@@ -65,6 +65,10 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstdarg>
+#include <cstdint>
+#include <utility>
+#include <algorithm>
+#include <climits>
 
 extern QueryServ* QServ;
 extern EntityList entity_list;
@@ -2856,108 +2860,76 @@ bool Client::TakeMoneyFromPP(uint64 copper, bool update_client) {
 	}
 }
 
-void Client::AddPlatinum(uint32 platinum, bool update_client) {
+void Client::AddPlatinum(uint32 platinum, bool update_client, bool update_db) {
 	const auto copper = static_cast<uint64>(platinum) * 1000;
-	AddMoneyToPP(copper, update_client);
+	AddMoneyToPP(copper, update_client, update_db);
 }
 
-void Client::AddMoneyToPP(uint64 copper, bool update_client){
-	uint64 temporary_copper;
-	uint64 temporary_copper_two;
-	temporary_copper = copper;
+void Client::AddMoneyToPP(uint64 copper, bool update_client, bool update_db) {
+	if (copper == 0) return;
 
-	/* Add Amount of Platinum */
-	temporary_copper_two = temporary_copper / 1000;
-	m_external_handin_money_returned.platinum = temporary_copper_two;
-	int32 new_value = m_pp.platinum + temporary_copper_two;
+	uint64 remaining = copper;
 
-	if (new_value < 0) {
-		m_pp.platinum = 0;
-	} else {
-		m_pp.platinum = m_pp.platinum + temporary_copper_two;
-	}
+	// Use INT32_MAX to align with the wallet maxes
+	uint64 p_pool = remaining / 1000;
+	uint32 p = (p_pool > INT32_MAX) ? INT32_MAX : static_cast<uint32>(p_pool);
+	m_pp.platinum = (INT32_MAX - m_pp.platinum < static_cast<int32>(p)) ? INT32_MAX : m_pp.platinum + static_cast<int32>(p);
+	remaining -= static_cast<uint64>(p) * 1000;
 
-	temporary_copper -= temporary_copper_two * 1000;
+	uint64 g_pool = remaining / 100;
+	uint32 g = (g_pool > INT32_MAX) ? INT32_MAX : static_cast<uint32>(g_pool);
+	m_pp.gold = (INT32_MAX - m_pp.gold < static_cast<int32>(g)) ? INT32_MAX : m_pp.gold + static_cast<int32>(g);
+	remaining -= static_cast<uint64>(g) * 100;
 
-	/* Add Amount of Gold */
-	temporary_copper_two = temporary_copper / 100;
-	new_value = m_pp.gold + temporary_copper_two;
-	m_external_handin_money_returned.gold = temporary_copper_two;
+	uint64 s_pool = remaining / 10;
+	uint32 s = (s_pool > INT32_MAX) ? INT32_MAX : static_cast<uint32>(s_pool);
+	m_pp.silver = (INT32_MAX - m_pp.silver < static_cast<int32>(s)) ? INT32_MAX : m_pp.silver + static_cast<int32>(s);
+	remaining -= static_cast<uint64>(s) * 10;
 
-	if (new_value < 0) {
-		m_pp.gold = 0;
-	} else {
-		m_pp.gold = m_pp.gold + temporary_copper_two;
-	}
-
-	temporary_copper -= temporary_copper_two * 100;
-
-	/* Add Amount of Silver */
-	temporary_copper_two = temporary_copper / 10;
-	new_value = m_pp.silver + temporary_copper_two;
-	m_external_handin_money_returned.silver = temporary_copper_two;
-
-	if (new_value < 0) {
-		m_pp.silver = 0;
-	} else {
-		m_pp.silver = m_pp.silver + temporary_copper_two;
-	}
-
-	temporary_copper -= temporary_copper_two * 10;
-
-	/* Add Amount of Copper */
-	temporary_copper_two = temporary_copper;
-	new_value = m_pp.copper + temporary_copper_two;
-	m_external_handin_money_returned.copper = temporary_copper_two;
-
-	if (new_value < 0) {
-		m_pp.copper = 0;
-	} else {
-		m_pp.copper = m_pp.copper + temporary_copper_two;
-	}
-
-	//send them all at once, since the above code stopped working.
-	if (update_client) {
-		SendMoneyUpdate();
-	}
+	uint32 c = (remaining > INT32_MAX) ? INT32_MAX : static_cast<uint32>(remaining);
+	m_pp.copper = (INT32_MAX - m_pp.copper < static_cast<int32>(c)) ? INT32_MAX : m_pp.copper + static_cast<int32>(c);
 
 	RecalcWeight();
-
-	SaveCurrency();
-
-	m_external_handin_money_returned.return_source = "AddMoneyToPP";
-
-	LogDebug("Client::AddMoneyToPP() [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]", GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
-}
-
-void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client){
-	int32 new_value = m_pp.platinum + platinum;
-	if (new_value >= 0 && new_value > m_pp.platinum) {
-		m_pp.platinum += platinum;
-	}
-
-	new_value = m_pp.gold + gold;
-	if (new_value >= 0 && new_value > m_pp.gold) {
-		m_pp.gold += gold;
-	}
-
-	new_value = m_pp.silver + silver;
-	if (new_value >= 0 && new_value > m_pp.silver) {
-		m_pp.silver += silver;
-	}
-
-	new_value = m_pp.copper + copper;
-	if (new_value >= 0 && new_value > m_pp.copper) {
-		m_pp.copper += copper;
-	}
 
 	if (update_client) {
 		SendMoneyUpdate();
 	}
+	if (update_db) {
+		SaveCurrency();
+	}
+
+	// Logs exact calculated chunks in place to maintain script cancel security
+	m_external_handin_money_returned = ExternalHandinMoneyReturned{
+		.copper = c,
+		.silver = s,
+		.gold = g,
+		.platinum = p,
+		.return_source = "AddMoneyToPP"
+	};
+
+#if (EQDEBUG>=5)
+	LogDebug("Client::AddMoneyToPP(uint64) [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]",
+		GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
+#endif
+}
+
+void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client, bool update_db) {
+	// Guard against overflow vulnerabilities using look-ahead signed boundaries
+	m_pp.platinum = (INT32_MAX - m_pp.platinum < static_cast<int32>(platinum)) ? INT32_MAX : m_pp.platinum + static_cast<int32>(platinum);
+	m_pp.gold = (INT32_MAX - m_pp.gold < static_cast<int32>(gold)) ? INT32_MAX : m_pp.gold + static_cast<int32>(gold);
+	m_pp.silver = (INT32_MAX - m_pp.silver < static_cast<int32>(silver)) ? INT32_MAX : m_pp.silver + static_cast<int32>(silver);
+	m_pp.copper = (INT32_MAX - m_pp.copper < static_cast<int32>(copper)) ? INT32_MAX : m_pp.copper + static_cast<int32>(copper);
 
 	RecalcWeight();
-	SaveCurrency();
 
+	if (update_client) {
+		SendMoneyUpdate();
+	}
+	if (update_db) {
+		SaveCurrency();
+	}
+
+	// Tracks exact parameter inputs verbatim for transaction safety
 	m_external_handin_money_returned = ExternalHandinMoneyReturned{
 		.copper = copper,
 		.silver = silver,
@@ -2967,8 +2939,8 @@ void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 plat
 	};
 
 #if (EQDEBUG>=5)
-		LogDebug("Client::AddMoneyToPP() [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]",
-			GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
+	LogDebug("Client::AddMoneyToPP(multi) [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]",
+		GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
 #endif
 }
 
@@ -3033,6 +3005,102 @@ uint64 Client::GetAllMoney() {
 			)
 		)
 	);
+}
+
+uint32 Client::GetMerchantSellPrice(Mob* merchant, const EQ::ItemData* item) {
+	if (!merchant || !item || item->ID == 0) return 0;
+
+	double price = item->Price * item->SellRate;
+
+	if (!RuleB(Merchant, UseClassicPriceMod)) {
+		price *= RuleR(Merchant, SellCostMod);
+	}
+
+	if (RuleB(Merchant, UsePriceMod)) {
+		price *= CalcPriceMod(merchant, false);
+	}
+
+	return static_cast<uint32>(price + 0.5);
+}
+
+uint32 Client::GetMerchantSellPrice(Mob* merchant, const EQ::ItemInstance* inst) {
+	if (!inst) return 0;
+	return GetMerchantSellPrice(merchant, inst->GetItem());
+}
+
+uint32 Client::GetMerchantBuyPrice(Mob* merchant, const EQ::ItemData* item) {
+	if (!merchant || !item || item->ID == 0) return 0;
+
+	double price = item->Price;
+
+	if (!RuleB(Merchant, UseClassicPriceMod)) {
+		price *= RuleR(Merchant, BuyCostMod);
+	}
+
+	if (RuleB(Merchant, UsePriceMod)) {
+		price *= CalcPriceMod(merchant, true);
+	}
+
+	return static_cast<uint32>(price + 0.5);
+}
+
+uint32 Client::GetMerchantBuyPrice(Mob* merchant, const EQ::ItemInstance* inst) {
+	if (!inst) return 0;
+	return GetMerchantBuyPrice(merchant, inst->GetItem());
+}
+
+uint32 Client::ResolvePlayerSellQuantity(EQ::ItemInstance* inst, uint32 quantity, uint32 unit_price) {
+	if (!inst) return 0;
+
+	// 1. Stacks & charged items both have "charges", but only stacks use it to mean item quantity
+	uint32 safe_quantity = inst->IsCharged() ? 1 : quantity;
+
+	// 2. If selling a stack quantity, ensure player has that many to sell
+	if (safe_quantity > 1 && std::cmp_greater(safe_quantity, inst->GetCharges()))
+		return 0;
+
+	// 3. If total price would exceed the max price allowed per transaction, reduce the quantity
+	if (unit_price > 0) {
+		uint32 max_quantity = 4000000000 / unit_price;
+		safe_quantity = std::min(safe_quantity, max_quantity);
+	}
+
+	return safe_quantity;
+}
+
+void Client::UpdateMerchantStock(Mob* merchant, EQ::ItemInstance* inst, uint32 quantity) {
+	if (!merchant || !inst || !inst->GetItem() || !merchant->GetKeepsSoldItems()) return;
+
+	uint32 item_id = inst->GetID();
+	int merchant_type = merchant->CastToNPC()->MerchantType;
+	uint32 npc_type_id = merchant->GetNPCTypeID();
+
+	// 1. Save item to merchant's temp storage
+	int freeslot = zone->SaveTempItem(merchant_type, npc_type_id, item_id, quantity, true);
+	if (freeslot <= 0)
+		return;
+
+	// 2. Clone item for the packet to alter properties without affecting player's item before delete
+	EQ::ItemInstance* instClone = inst->Clone();
+	if (!instClone)
+		return;
+
+	// 3. Quantity & Cost
+	uint32 merchant_quantity = zone->GetTempMerchantQuantity(npc_type_id, freeslot);
+	uint32 cost = GetMerchantSellPrice(merchant, inst->GetItem());
+
+	instClone->SetPrice(cost);
+	instClone->SetMerchantSlot(freeslot);
+
+	if (instClone->IsStackable()) {
+		instClone->SetCharges(merchant_quantity);
+	}
+
+	instClone->SetMerchantCount(merchant_quantity);
+
+	// 4. Inform client UI about the slot update
+	SendItemPacket(freeslot - 1, instClone, ItemPacketMerchant);
+	safe_delete(instClone);
 }
 
 bool Client::CheckIncreaseSkill(EQ::skills::SkillType skillid, Mob *against_who, int chancemodi) {
