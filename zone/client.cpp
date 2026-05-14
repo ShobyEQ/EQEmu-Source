@@ -2865,7 +2865,7 @@ void Client::AddPlatinum(uint32 platinum, bool update_client) {
 	AddMoneyToPP(copper, update_client);
 }
 
-void Client::AddMoneyToPP(uint64 copper, bool update_client) {
+void Client::AddMoneyToPP(uint64 copper, bool update_client){
 	uint64 temporary_copper;
 	uint64 temporary_copper_two;
 	temporary_copper = copper;
@@ -2877,8 +2877,7 @@ void Client::AddMoneyToPP(uint64 copper, bool update_client) {
 
 	if (new_value < 0) {
 		m_pp.platinum = 0;
-	}
-	else {
+	} else {
 		m_pp.platinum = m_pp.platinum + temporary_copper_two;
 	}
 
@@ -2891,8 +2890,7 @@ void Client::AddMoneyToPP(uint64 copper, bool update_client) {
 
 	if (new_value < 0) {
 		m_pp.gold = 0;
-	}
-	else {
+	} else {
 		m_pp.gold = m_pp.gold + temporary_copper_two;
 	}
 
@@ -2905,8 +2903,7 @@ void Client::AddMoneyToPP(uint64 copper, bool update_client) {
 
 	if (new_value < 0) {
 		m_pp.silver = 0;
-	}
-	else {
+	} else {
 		m_pp.silver = m_pp.silver + temporary_copper_two;
 	}
 
@@ -2919,8 +2916,7 @@ void Client::AddMoneyToPP(uint64 copper, bool update_client) {
 
 	if (new_value < 0) {
 		m_pp.copper = 0;
-	}
-	else {
+	} else {
 		m_pp.copper = m_pp.copper + temporary_copper_two;
 	}
 
@@ -2938,7 +2934,7 @@ void Client::AddMoneyToPP(uint64 copper, bool update_client) {
 	LogDebug("Client::AddMoneyToPP() [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]", GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
 }
 
-void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client) {
+void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client){
 	int32 new_value = m_pp.platinum + platinum;
 	if (new_value >= 0 && new_value > m_pp.platinum) {
 		m_pp.platinum += platinum;
