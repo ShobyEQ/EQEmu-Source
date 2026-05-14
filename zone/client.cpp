@@ -2860,76 +2860,112 @@ bool Client::TakeMoneyFromPP(uint64 copper, bool update_client) {
 	}
 }
 
-void Client::AddPlatinum(uint32 platinum, bool update_client, bool update_db) {
+void Client::AddPlatinum(uint32 platinum, bool update_client) {
 	const auto copper = static_cast<uint64>(platinum) * 1000;
-	AddMoneyToPP(copper, update_client, update_db);
+	AddMoneyToPP(copper, update_client);
 }
 
-void Client::AddMoneyToPP(uint64 copper, bool update_client, bool update_db) {
-	if (copper == 0) return;
+void Client::AddMoneyToPP(uint64 copper, bool update_client) {
+	uint64 temporary_copper;
+	uint64 temporary_copper_two;
+	temporary_copper = copper;
 
-	uint64 remaining = copper;
+	/* Add Amount of Platinum */
+	temporary_copper_two = temporary_copper / 1000;
+	m_external_handin_money_returned.platinum = temporary_copper_two;
+	int32 new_value = m_pp.platinum + temporary_copper_two;
 
-	// Use INT32_MAX to align with the wallet maxes
-	uint64 p_pool = remaining / 1000;
-	uint32 p = (p_pool > INT32_MAX) ? INT32_MAX : static_cast<uint32>(p_pool);
-	m_pp.platinum = (INT32_MAX - m_pp.platinum < static_cast<int32>(p)) ? INT32_MAX : m_pp.platinum + static_cast<int32>(p);
-	remaining -= static_cast<uint64>(p) * 1000;
+	if (new_value < 0) {
+		m_pp.platinum = 0;
+	}
+	else {
+		m_pp.platinum = m_pp.platinum + temporary_copper_two;
+	}
 
-	uint64 g_pool = remaining / 100;
-	uint32 g = (g_pool > INT32_MAX) ? INT32_MAX : static_cast<uint32>(g_pool);
-	m_pp.gold = (INT32_MAX - m_pp.gold < static_cast<int32>(g)) ? INT32_MAX : m_pp.gold + static_cast<int32>(g);
-	remaining -= static_cast<uint64>(g) * 100;
+	temporary_copper -= temporary_copper_two * 1000;
 
-	uint64 s_pool = remaining / 10;
-	uint32 s = (s_pool > INT32_MAX) ? INT32_MAX : static_cast<uint32>(s_pool);
-	m_pp.silver = (INT32_MAX - m_pp.silver < static_cast<int32>(s)) ? INT32_MAX : m_pp.silver + static_cast<int32>(s);
-	remaining -= static_cast<uint64>(s) * 10;
+	/* Add Amount of Gold */
+	temporary_copper_two = temporary_copper / 100;
+	new_value = m_pp.gold + temporary_copper_two;
+	m_external_handin_money_returned.gold = temporary_copper_two;
 
-	uint32 c = (remaining > INT32_MAX) ? INT32_MAX : static_cast<uint32>(remaining);
-	m_pp.copper = (INT32_MAX - m_pp.copper < static_cast<int32>(c)) ? INT32_MAX : m_pp.copper + static_cast<int32>(c);
+	if (new_value < 0) {
+		m_pp.gold = 0;
+	}
+	else {
+		m_pp.gold = m_pp.gold + temporary_copper_two;
+	}
+
+	temporary_copper -= temporary_copper_two * 100;
+
+	/* Add Amount of Silver */
+	temporary_copper_two = temporary_copper / 10;
+	new_value = m_pp.silver + temporary_copper_two;
+	m_external_handin_money_returned.silver = temporary_copper_two;
+
+	if (new_value < 0) {
+		m_pp.silver = 0;
+	}
+	else {
+		m_pp.silver = m_pp.silver + temporary_copper_two;
+	}
+
+	temporary_copper -= temporary_copper_two * 10;
+
+	/* Add Amount of Copper */
+	temporary_copper_two = temporary_copper;
+	new_value = m_pp.copper + temporary_copper_two;
+	m_external_handin_money_returned.copper = temporary_copper_two;
+
+	if (new_value < 0) {
+		m_pp.copper = 0;
+	}
+	else {
+		m_pp.copper = m_pp.copper + temporary_copper_two;
+	}
+
+	//send them all at once, since the above code stopped working.
+	if (update_client) {
+		SendMoneyUpdate();
+	}
 
 	RecalcWeight();
+
+	SaveCurrency();
+
+	m_external_handin_money_returned.return_source = "AddMoneyToPP";
+
+	LogDebug("Client::AddMoneyToPP() [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]", GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
+}
+
+void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client) {
+	int32 new_value = m_pp.platinum + platinum;
+	if (new_value >= 0 && new_value > m_pp.platinum) {
+		m_pp.platinum += platinum;
+	}
+
+	new_value = m_pp.gold + gold;
+	if (new_value >= 0 && new_value > m_pp.gold) {
+		m_pp.gold += gold;
+	}
+
+	new_value = m_pp.silver + silver;
+	if (new_value >= 0 && new_value > m_pp.silver) {
+		m_pp.silver += silver;
+	}
+
+	new_value = m_pp.copper + copper;
+	if (new_value >= 0 && new_value > m_pp.copper) {
+		m_pp.copper += copper;
+	}
 
 	if (update_client) {
 		SendMoneyUpdate();
 	}
-	if (update_db) {
-		SaveCurrency();
-	}
-
-	// Logs exact calculated chunks in place to maintain script cancel security
-	m_external_handin_money_returned = ExternalHandinMoneyReturned{
-		.copper = c,
-		.silver = s,
-		.gold = g,
-		.platinum = p,
-		.return_source = "AddMoneyToPP"
-	};
-
-#if (EQDEBUG>=5)
-	LogDebug("Client::AddMoneyToPP(uint64) [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]",
-		GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
-#endif
-}
-
-void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client, bool update_db) {
-	// Guard against overflow vulnerabilities using look-ahead signed boundaries
-	m_pp.platinum = (INT32_MAX - m_pp.platinum < static_cast<int32>(platinum)) ? INT32_MAX : m_pp.platinum + static_cast<int32>(platinum);
-	m_pp.gold = (INT32_MAX - m_pp.gold < static_cast<int32>(gold)) ? INT32_MAX : m_pp.gold + static_cast<int32>(gold);
-	m_pp.silver = (INT32_MAX - m_pp.silver < static_cast<int32>(silver)) ? INT32_MAX : m_pp.silver + static_cast<int32>(silver);
-	m_pp.copper = (INT32_MAX - m_pp.copper < static_cast<int32>(copper)) ? INT32_MAX : m_pp.copper + static_cast<int32>(copper);
 
 	RecalcWeight();
+	SaveCurrency();
 
-	if (update_client) {
-		SendMoneyUpdate();
-	}
-	if (update_db) {
-		SaveCurrency();
-	}
-
-	// Tracks exact parameter inputs verbatim for transaction safety
 	m_external_handin_money_returned = ExternalHandinMoneyReturned{
 		.copper = copper,
 		.silver = silver,
@@ -2939,7 +2975,7 @@ void Client::AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 plat
 	};
 
 #if (EQDEBUG>=5)
-	LogDebug("Client::AddMoneyToPP(multi) [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]",
+	LogDebug("Client::AddMoneyToPP() [{}] should have: plat:[{}] gold:[{}] silver:[{}] copper:[{}]",
 		GetName(), m_pp.platinum, m_pp.gold, m_pp.silver, m_pp.copper);
 #endif
 }

@@ -898,9 +898,9 @@ public:
 	void SendMoneyUpdate();
 	bool TakeMoneyFromPP(uint64 copper, bool update_client = false);
 	bool TakePlatinum(uint32 platinum, bool update_client = false);
-	void AddMoneyToPP(uint64 copper, bool update_client = false, bool update_db = true);
-	void AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client = false, bool update_db = true);
-	void AddPlatinum(uint32 platinum, bool update_client = false, bool update_db = true);
+	void AddMoneyToPP(uint64 copper, bool update_client = false);
+	void AddMoneyToPP(uint32 copper, uint32 silver, uint32 gold, uint32 platinum, bool update_client = false);
+	void AddPlatinum(uint32 platinum, bool update_client = false);
 	bool HasMoney(uint64 copper);
 	uint64 GetCarriedMoney();
 	uint32 GetCarriedPlatinum();
